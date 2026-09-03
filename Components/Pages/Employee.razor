@@ -3,7 +3,6 @@
 @using BlazorApp1.Data
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext DbContext
-@inject Microsoft.JSInterop.IJSRuntime JSRuntime
 
 @* https://dev.to/auyeungdavid_2847435260/step-by-step-guide-build-a-crud-blazor-app-with-entity-framework-and-postgresql-3ccj *@
 
@@ -138,12 +137,6 @@ else
     
     private async Task DeleteEmployee(Models.Employee employee)
     {
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Delete employee '{employee.Name}'?");
-        if (!confirmed)
-        {
-            return;
-        }
-
         var entity = await DbContext.Employees.FindAsync(employee.Id);
         if (entity is null)
         {

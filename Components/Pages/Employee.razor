@@ -1,0 +1,228 @@
+﻿@page "/employee"
+@rendermode InteractiveServer
+@using BlazorApp1.Data
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext DbContext
+@inject Microsoft.JSInterop.IJSRuntime JSRuntime
+
+@* https://dev.to/auyeungdavid_2847435260/step-by-step-guide-build-a-crud-blazor-app-with-entity-framework-and-postgresql-3ccj *@
+
+<h3>Employee</h3>
+
+
+@if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    if (employees.Count == 0)
+    {
+        <p>No employees found.</p>
+    }
+    else
+    {
+        <table class="table table-striped table-sm table-bordered">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Name</th>
+                    <th>Lastname</th>
+                    <th>Position</th>
+                    <th>Age</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var employee in employees)
+                {
+                    <tr>
+                        <td>@employee.Id</td>
+                        <td>@employee.Name</td>
+                        <td>@employee.Lastname</td>
+                        <td>@employee.Occupation</td>
+                        <td>@employee.Age</td>
+                        <td>
+                            <button class="btn btn-primary" @onclick="() => EditEmployee(employee)">Edit</button>
+                            <button class="btn btn-danger" @onclick="() => PromptDeleteEmployee(employee)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (showDeleteModal && employeePendingDelete is not null)
+    {
+        <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content shadow">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Confirm Delete</h5>
+                        <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CancelDeleteEmployee"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-1">Are you sure you want to delete this employee?</p>
+                        <div class="fw-semibold">@employeePendingDelete.Name @employeePendingDelete.Lastname</div>
+                        <div class="text-muted small">Occupation: @employeePendingDelete.Occupation</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CancelDeleteEmployee">Cancel</button>
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteEmployee">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade show"></div>
+    }
+
+    <button class="btn btn-success" @onclick="() => EditEmployee(new Models.Employee())">Add New Employee</button>
+
+    @if (isEditing)
+    {
+        <div class="mt-3 card card-body">
+            <h4>@(editingEmployee.Id == 0 ? "Add" : "Edit") Employee</h4>
+            <form>
+                <div class="form-group mb-2">
+                    <label>Name</label>
+                    <input type="text" class="form-control" @bind="editingEmployee.Name" />
+                </div>
+                <div class="form-group mb-2">
+                    <label>Lastname</label>
+                    <input type="text" class="form-control" @bind="editingEmployee.Lastname" />
+                </div>
+                <div class="form-group mb-2">
+                    <label>Occupation</label>
+                    <input type="text" class="form-control" @bind="editingEmployee.Occupation" />
+                </div>
+                <div class="form-group mb-3">
+                    <label>Age</label>
+                    <input type="number" class="form-control" @bind="editingEmployee.Age" />
+                </div>
+                <button type="button" class="btn btn-primary me-2" @onclick="SaveEmployee">Save</button>
+                <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+            </form>
+        </div>
+    }
+}
+
+@code {
+    private List<Models.Employee> employees = new List<Models.Employee>();
+    private Models.Employee editingEmployee = new();
+    private Models.Employee? employeePendingDelete;
+    private bool isEditing = false;
+    private bool isLoading = true;
+    private bool showDeleteModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await DbContext.Employees.AsNoTracking().ToListAsync();
+        isLoading = false;
+    }
+
+    private void EditEmployee(Models.Employee employee)
+    {
+        // Implement edit functionality here
+        editingEmployee = new Models.Employee
+        {
+            Id = employee.Id,
+            Name = employee.Name,
+            Lastname = employee.Lastname,
+            Occupation = employee.Occupation,
+            Age = employee.Age,
+        };
+        isEditing = true;
+
+        Console.WriteLine($"Edit employee with ID: {employee.Id}");
+    }
+    
+    private async Task DeleteEmployee(Models.Employee employee)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Delete employee '{employee.Name}'?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var entity = await DbContext.Employees.FindAsync(employee.Id);
+        if (entity is null)
+        {
+            return;
+        }
+
+        DbContext.Employees.Remove(entity);
+        await DbContext.SaveChangesAsync();
+        employees = await DbContext.Employees.AsNoTracking().ToListAsync();
+    }
+
+    private void PromptDeleteEmployee(Models.Employee employee)
+    {
+        employeePendingDelete = employee;
+        showDeleteModal = true;
+    }
+
+    private void CancelDeleteEmployee()
+    {
+        employeePendingDelete = null;
+        showDeleteModal = false;
+    }
+
+    private async Task ConfirmDeleteEmployee()
+    {
+        if (employeePendingDelete is null)
+        {
+            return;
+        }
+
+        var entity = await DbContext.Employees.FindAsync(employeePendingDelete.Id);
+        if (entity is null)
+        {
+            CancelDeleteEmployee();
+            return;
+        }
+
+        DbContext.Employees.Remove(entity);
+        await DbContext.SaveChangesAsync();
+        employees = await DbContext.Employees.AsNoTracking().ToListAsync();
+        Console.WriteLine($"Delete employee with ID: {employeePendingDelete.Id}");
+        CancelDeleteEmployee();
+    }
+
+    private async Task SaveEmployee()
+    {
+        if (editingEmployee.Id == 0)
+        {
+            // Add new employee (never trust client-provided Id)
+            var newEmployee = new Models.Employee
+            {
+                Id = 0,
+                Name = editingEmployee.Name,
+                Lastname = editingEmployee.Lastname,
+                Occupation = editingEmployee.Occupation,
+                Age = editingEmployee.Age,
+            };
+
+            DbContext.Employees.Add(newEmployee);
+        }
+        else
+        {
+            // Update existing employee
+            var entity = await DbContext.Employees.FindAsync(editingEmployee.Id);
+            if (entity is null) return;
+
+            entity.Name = editingEmployee.Name;
+            entity.Lastname = editingEmployee.Lastname;
+            entity.Occupation = editingEmployee.Occupation;
+            entity.Age = editingEmployee.Age;
+        }
+
+        await DbContext.SaveChangesAsync();
+        employees = await DbContext.Employees.AsNoTracking().ToListAsync();
+        isEditing = false;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }   
+}
